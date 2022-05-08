@@ -6,17 +6,23 @@ This guide assumes your system distribution uses `podman` and `systemd`. The gui
 
 Syncthing is an open-source software that allows you to share files between devices. It's completely free, secure and decentralised.
 
-At the end of this guide, Syncthing will be installed on your system as an user service, meaning it will start when you login and stop when you logout.  
+At the end of this guide, Syncthing will be installed on your system as an user service, meaning it will start when you login and stop when you logout. Moreover, podman will automatically keep the container up to date automatically!  
 Following the philosophy of immutable operative systems, no command in this guide needs super user privileges, nor will touch any file outside the user portion of the file system. 
 
 As a secondary objective, this guide will try to explain each step, so you can hopefully adapt this guide to other services.
 
-## Step 1: Create the folder(s) you want to share
+## Step 1: Create the required folders
 
 As a first step, create the folder(s) that you'd like to share with other devices.  
 I'll create two folders called `share1` and `share2` inside `Documents`. 
 
 At the end of this guide, both folders will be shared to another device.
+
+You will also need to create a folder that will contain the Syncthing's config. You can create it by running the following command on your terminal:
+
+```
+mkdir ~/.config/syncthing
+```
 
 
 ## Step 2: Create the Podman container
@@ -31,23 +37,26 @@ For this guide, we'll use the Syncthing image that's available on https://hub.do
 ```
 podman run -d \
   --name=syncthing \
+  --label io.containers.autoupdate=registry \
   -e PUID=0 \
   -e PGID=0 \
   -p 127.0.0.1:8384:8384 \
   -p 22000:22000/tcp \
   -p 22000:22000/udp \
   -p 21027:21027/udp \
+  -v ~/.config/syncthing:/config:Z \
   -v ~/Documents/share1:/data1:Z \
   -v ~/Documents/share2:/data2:Z \
   lscr.io/linuxserver/syncthing:latest
 ```
 
 I've made the following modifications:
-- Replaced the `docker` command with `podman`
-- Removed optional arguments, to make it simpler
-- Removed the restart policy, as later in the guide we'll use `systemd` to manage the execution of this container
-- Use `0` instead of `1000` for PUID and GUID. While not ideal, those settings will make it so the processes *inside* the container will run as root, while *outside* the container will behave as your user. This setting is not suggested for production uses, but will work for our use case.
+- Replace the `docker` command with `podman`
+- Remove optional arguments, to make it simpler
+- Add `--label io.containers.autoupdate=registry`, that will instruct podman to keep the container up to date
+- Remove the restart policy, as later in the guide we'll use `systemd` to manage the execution of this container
 - Add `127.0.0.1:` to the port binding, to make the administration webpage accessible only on your computer, to make things a bit more secure
+- Use `0` instead of `1000` for PUID and GUID. While not ideal, those settings will make it so the processes *inside* the container will run as root, while *outside* the container will behave as your user. This setting is not suggested for production uses, but will work for our use case.
 - Add `:Z` to the volume binding, to allow the container to read and write the folders we want to share.
 
 **Please replace `~/Documents/share1` and `~/Documents/share2` with the folder(s) you've created in step 1**. As a reminder, `~` represents your home folder. Feel free to add or remove as many folders as you want.
@@ -119,7 +128,7 @@ cd ~/.config/systemd/user/
 
 Now we can use podman to generate the config for us. Run:
 ```
-podman generate systemd --name syncthing -f
+podman generate systemd --new --name syncthing -f
 ```
 
 As output, you should see a file path. That means it worked!
@@ -133,12 +142,12 @@ systemctl --user enable container-syncthing.service
 
 All is done! Now Syncthing will start automatically when you log in your system!
 
+
 # TODO
 
 This guide is not complete yet.
 
 ## Missing steps
-- How to keep the container up to date
 - How to add new folders after the container has already been created
 - How to uninstall everything
 
