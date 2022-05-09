@@ -140,7 +140,22 @@ systemctl --user daemon-reload
 systemctl --user enable container-syncthing.service
 ```
 
-All is done! Now Syncthing will start automatically when you log in your system!
+Now Syncthing will start automatically when you log in your system!
+
+## Step 5: Auto update
+Podman has the ability to keep your containers up to date. By adding the `--label io.containers.autoupdate=registry` when we created the continer, we declared that we'd like to keep it up to date when new images in the registry (DockerHub in our case) are available.
+
+You can trigger an update manually, by calling
+```
+podman auto-update
+```
+
+Podman has also the optional ability to update containers automatically. To do so, you need to enable the relative systemd service:
+```
+systemctl enable --user --now podman-auto-update.timer
+```
+
+That's it! Now your container will stay up to date automatically!
 
 
 # TODO
