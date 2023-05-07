@@ -157,13 +157,23 @@ systemctl enable --user --now podman-auto-update.timer
 
 That's it! Now your container will stay up to date automatically!
 
+# Extra
+
+## How to add a folder
+Adding folders after the container has been created it's pretty straight forward:
+1. Locate the `systemd` service definition inside `~/.config/systemd/user/`. In should be called `container-syncthing.service`
+2. Using your favorite text editor, open the file and add another volume argument on the `ExecStart` command. For example, add the argument `-v ~/Documents/share3:/data3:Z` to share the folder `share3` inside `Documents`.  
+   If you need to add a new line, please remember to add a trailing `\`, otherwise the command will not be recognised correctly
+3. Reload the `systemd` configuration using the command `systemctl --user daemon-reload`
+4. Restart Syncthing with `systemctl --user restart container-syncthing.service`
+5. On the Syncthing's web interface (`http://localhost:8384/`), add the folders. Using the same example as above, the folder to share is called `/data3` inside the container
+
 
 # TODO
 
 This guide is not complete yet.
 
 ## Missing steps
-- How to add new folders after the container has already been created
 - How to uninstall everything
 
 ## To improve
