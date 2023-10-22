@@ -14,64 +14,83 @@ As a secondary objective, this guide will try to explain each step, so you can h
 ## Step 1: Create the required folders
 
 As a first step, create the folder(s) that you'd like to share with other devices.  
-I'll create two folders called `share1` and `share2` inside `Documents`. 
+I'll create two folders called `share1` and `share2` inside `Documents`, however feel free to create (or reuse) any folder(s) you like: at the end of this guide, those folders will be shared to another device.
 
-At the end of this guide, both folders will be shared to another device.
-
-You will also need to create a folder that will contain the Syncthing's config. You can create it by running the following command on your terminal:
+You will also need an additional folder to store Syncthing's configuration. You can create it by running the following command on your terminal:
 
 ```
 mkdir ~/.config/syncthing
 ```
 
 
-## Step 2: Create the Podman container
+## Step 2: Create the systemd Podman definition
 
 Podman is a software to run other programs in a container completely isolated from the rest of the system.  
 This is perfect for our use case, since we can use it to run Syncthing on top of our current installation, without the need to touch our system.
 
+Systemd is a software suit that provides many functionalities, but for the context of this guide, we can think about it as the manager of all other software that runs on your machine.
+
+In this step, we're going to create a systemd definition for Podman.  
+Advanced users might recognise that what we're doing is a bit different: we're actually creating a Quadlet definition, that will get automatically converted to a systemd definition on our behalf. You can find more informations in [the official documentation](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).
+
+----
+
 One of the biggest catalog of images that Podman can run is available on https://hub.docker.com. The images available there are made for Docker (an alternative to Podman), however they can usually run on Podman without any issue.
 
-For this guide, we'll use the Syncthing image that's available on https://hub.docker.com/r/linuxserver/syncthing. To run it, we'll need to find the command to start the container. You can find it under the "docker cli" section. With a few modifications (explained below), we obtain the following command:
+For this guide, we'll use the Syncthing image that's available on [https://hub.docker.com/r/linuxserver/syncthing](hub.docker.com/r/syncthing/syncthing).
 
+1. Create a folder to store the systemd configuration:
+    ```
+    mkdir -p ~/.config/containers/systemd/
+    ```
+1. With your favorite text editor, create the file `~/.config/containers/systemd/syncthing.container` (`~` is your home directory).
+    Using nano:
+    ```
+    nano ~/.config/containers/systemd/syncthing.container
+    ```
+1. Paste the following content
+    ```
+    [Unit]
+    Description=Podman syncthing.service
+    Wants=network-online.target
+    After=network-online.target
+    
+    [Service]
+    Restart=on-failure
+    TimeoutStartSec=900
+    
+    [Container]
+    Image=docker.io/syncthing/syncthing:latest
+    AutoUpdate=registry
+    PublishPort=127.0.0.1:8384:8384
+    PublishPort=22000:22000/tcp
+    PublishPort=22000:22000/udp
+    PublishPort=21027:21027/udp
+    UserNS=keep-id:uid=1000,gid=1000
+    Volume=%h/.config/syncthing:/var/syncthing/config:Z
+
+    # Folders to share
+    Volume=%h/Documents/share1:/var/syncthing/share1:Z
+    Volume=%h/Documents/share2:/var/syncthing/share2:Z
+    
+    [Install]
+    WantedBy=default.target
+    ```
+    **Please replace `%h/Documents/share1` and `%h/Documents/share2` with the folder(s) you've created in step 1**. `%h` represents your home folder. Feel free to add or remove as many folders as you want.
+1. Save the file (with nano, press `CTRL+O`, `Enter`, and then exit with `CTRL+X`).
+
+Now, the systemd definition is in place. We just need to load it and start Syncthing:
 ```
-podman run -d \
-  --name=syncthing \
-  --label io.containers.autoupdate=registry \
-  -e PUID=0 \
-  -e PGID=0 \
-  -p 127.0.0.1:8384:8384 \
-  -p 22000:22000/tcp \
-  -p 22000:22000/udp \
-  -p 21027:21027/udp \
-  -v ~/.config/syncthing:/config:Z \
-  -v ~/Documents/share1:/data1:Z \
-  -v ~/Documents/share2:/data2:Z \
-  lscr.io/linuxserver/syncthing:latest
+systemctl --user daemon-reload
+systemctl --user start syncthing.service
 ```
-
-I've made the following modifications:
-- Replace the `docker` command with `podman`
-- Remove optional arguments, to make it simpler
-- Add `--label io.containers.autoupdate=registry`, that will instruct podman to keep the container up to date
-- Remove the restart policy, as later in the guide we'll use `systemd` to manage the execution of this container
-- Add `127.0.0.1:` to the port binding, to make the administration webpage accessible only on your computer, to make things a bit more secure
-- Use `0` instead of `1000` for PUID and GUID. While not ideal, those settings will make it so the processes *inside* the container will run as root, while *outside* the container will behave as your user. This setting is not suggested for production uses, but will work for our use case.
-- Add `:Z` to the volume binding, to allow the container to read and write the folders we want to share.
-
-**Please replace `~/Documents/share1` and `~/Documents/share2` with the folder(s) you've created in step 1**. As a reminder, `~` represents your home folder. Feel free to add or remove as many folders as you want.
-
-Now you can open your terminal, and run the command above.  
-After a few seconds (or minutes, depending on your connection), the command should return a string of letter and numbers, like `a6f7b9580c1fe90ea60cd8b56fdbd18bd0dbd4814a2cc9b63b6d440fc8f4528b`. You can ignore it, that's just the identifier for the container that is now running.
 
 You can test that everything is working by connecting to http://localhost:8384. If everything worked, you should see the Syncthing homepage.
 
 If you can't reach http://localhost:8384, those commands can help you troubleshoot:
+- `systemctl --user status syncthing.service` to see the status of Syncthing, as seen by systemd. It contains a log of information, but in particular, you might be interested in the `Active` status and on the logs.
 - `podman ps` will list all the running containers. You should see `syncthing` in there
 - `podman logs syncthing` to see the messages produced by Syncthing
-- `podman exec -it syncthing /bin/bash` to open a terminal inside the container
-- `podman stop syncthing && podman rm syncthing` to stop and remove the container. Useful if you need to start again from scratch
-
 
 
 ## Step 3: Configure Syncthing
@@ -94,56 +113,14 @@ I suggest adding the devices as "Introducer", so adding a third device will be e
 
 ### Sharing folders
 
-When sharing new folders, or adding folders shared by other devices, make sure to use **/data1/** or **/data2/** as the folder path, since that's how the folders created on step 1 are called inside the Syncthing container.
+When sharing new folders, or adding folders shared by other devices, make sure to use **/var/syncthing/share1/** or **/var/syncthing/share2/** as the folder path, since that's how the folders created on step 1 are called inside the Syncthing container.
 
 Apart from that, sharing folders between devices should work as expected.
 
-## Step 4: Create the `systemd` service
 
-Right now the container has been created, but it needs to be started and stopped manually.
+## Step 4: Auto update
 
-To start it:
-```
-podman start syncthing
-```
-
-To stop it:
-```
-podman stop syncthing
-```
-
-
-Ideally, we'd like that to be done automatically when we log in to our system. To achieve that, we can use `systemd`, a software that among other things can manage the execution of the container for us.
-
-First, we need to create its configuration folder. On a terminal, run
-```
-mkdir -p ~/.config/systemd/user/
-```
-
-Then, enter that directory:
-
-```
-cd ~/.config/systemd/user/
-```
-
-Now we can use podman to generate the config for us. Run:
-```
-podman generate systemd --new --name syncthing -f
-```
-
-As output, you should see a file path. That means it worked!
-
-The very last step is to make `systemd` aware of the new file, and enable the new service:
-
-```
-systemctl --user daemon-reload
-systemctl --user enable container-syncthing.service
-```
-
-Now Syncthing will start automatically when you log in your system!
-
-## Step 5: Auto update
-Podman has the ability to keep your containers up to date. By adding the `--label io.containers.autoupdate=registry` when we created the continer, we declared that we'd like to keep it up to date when new images in the registry (DockerHub in our case) are available.
+If you followed this guide, the Podman container is already setup to be auto-updated (we added `AutoUpdate=registry` in the systemd definition).
 
 You can trigger an update manually, by calling
 ```
@@ -161,20 +138,12 @@ That's it! Now your container will stay up to date automatically!
 
 ## How to add a folder
 Adding folders after the container has been created it's pretty straight forward:
-1. Locate the `systemd` service definition inside `~/.config/systemd/user/`. In should be called `container-syncthing.service`
-2. Using your favorite text editor, open the file and add another volume argument on the `ExecStart` command. For example, add the argument `-v ~/Documents/share3:/data3:Z` to share the folder `share3` inside `Documents`.  
-   If you need to add a new line, please remember to add a trailing `\`, otherwise the command will not be recognised correctly
+1. Locate the `systemd` service definition inside `~/.config/containers/systemd/`. In should be called `syncthing.container`
+2. Using your favorite text editor, open the file and add another `Volume=` parameter. For example, add the argument `Volume=%h/Documents/share3:/var/syncthing/share3:Z` to share the folder `share3` inside `Documents`.  
 3. Reload the `systemd` configuration using the command `systemctl --user daemon-reload`
 4. Restart Syncthing with `systemctl --user restart container-syncthing.service`
-5. On the Syncthing's web interface (`http://localhost:8384/`), add the folders. Using the same example as above, the folder to share is called `/data3` inside the container
-
+5. On the Syncthing's web interface (`http://localhost:8384/`), add the folders. Using the same example as above, the folder to share is called `/var/syncthing/share3` inside the container
 
 # TODO
 
-This guide is not complete yet.
-
-## Missing steps
 - How to uninstall everything
-
-## To improve
-- How to create the container so the internal process doesn't need to run as root
