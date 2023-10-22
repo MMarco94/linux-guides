@@ -144,6 +144,26 @@ Adding folders after the container has been created it's pretty straight forward
 4. Restart Syncthing with `systemctl --user restart container-syncthing.service`
 5. On the Syncthing's web interface (`http://localhost:8384/`), add the folders. Using the same example as above, the folder to share is called `/var/syncthing/share3` inside the container
 
+## Local discovery
+
+If you have a keen eye, you might have noticed that files over the local network are not transferring as fast as they could. That's because local discovery doesn't work in the network isolation offered by Podman. To work around that, there are two options:
+1. From _other_ devices, you change the device address from `dynamic` to your local IP. For example to `tcp://192.168.1.14`. This works only if the IP of your device is fixed, and the two devices never leave the local network.
+1. Change the Podman definition to allow full network access to Syncthing. While it's not ideal from a security perspective, it does work. Edit `~/.config/containers/systemd/syncthing.container` to add `Network=host` inside the `[Container]` section. For example:
+    ```
+    [Unit]
+    Description=Podman syncthing.service
+    ...
+    
+    [Container]
+    Image=docker.io/syncthing/syncthing:latest
+    ...
+    Network=host
+    
+    [Install]
+    WantedBy=default.target
+    ```
+    In this setup, you can remove all `PublishPort` settings, as the container has unbounded access to the network.
+
 # TODO
 
 - How to uninstall everything
