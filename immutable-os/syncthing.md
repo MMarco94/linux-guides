@@ -13,7 +13,7 @@ As a secondary objective, this guide will try to explain each step, so you can h
 
 ## Step 1: Create the required folders
 
-As a first step, create the folder(s) that you'd like to share with other devices.  
+As a first step, create the folder(s) that you'd like to share with other devices. **The container will not start if you map folders that do not exist**. 
 I'll create two folders called `share1` and `share2` inside `Documents`, however feel free to create (or reuse) any folder(s) you like: at the end of this guide, those folders will be shared to another device.
 
 You will also need an additional folder to store Syncthing's configuration. You can create it by running the following command on your terminal:
